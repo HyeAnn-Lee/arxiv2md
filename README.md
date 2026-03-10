@@ -50,7 +50,7 @@ Visit [arxiv2md.org](https://arxiv2md.org) and paste any arXiv URL, or append `2
 
 ```bash
 # Install
-pip install -e .
+pip install arxiv2markdown
 
 # Basic usage
 arxiv2md 2501.11120v1 -o paper.md
