@@ -171,12 +171,17 @@ def _iter_headings(root: Tag) -> Iterable[Tag]:
             continue
         if heading.find_parent(class_=re.compile(r"ltx_abstract")):
             continue
+        # Skip headings inside theorem-like and float environments (e.g. Definition, Lemma,
+        # Theorem, Algorithm boxes) – these are not document sections.
+        if heading.find_parent(class_=re.compile(r"ltx_theorem|ltx_float")):
+            continue
         yield heading
 
 
 def _is_title_heading(heading: Tag) -> bool:
     classes = heading.get("class", [])
-    return "ltx_title_document" in classes
+    # ltx_title_document = the paper title; ltx_runninghead = in-environment label (e.g. "Theorem 1.")
+    return "ltx_title_document" in classes or "ltx_runninghead" in classes
 
 
 def _collect_section_html(heading: Tag) -> str | None:

@@ -167,3 +167,40 @@ def test_remove_inline_citations_ignores_non_ltx_cite() -> None:
 
     result = convert_fragment_to_markdown(html, remove_inline_citations=True)
     assert "A Book Title" in result
+
+
+def test_span_in_div_without_p_wrapper() -> None:
+    """Inline text in a <span> directly inside a <div> must not be silently dropped.
+
+    LaTeXML sometimes wraps short content in a <span> inside a <div class="ltx_para">
+    without an intermediate <p> element.
+    """
+    html = '<div class="ltx_para"><span class="ltx_text">Content in span.</span></div>'
+
+    result = convert_fragment_to_markdown(html)
+    assert "Content in span." in result
+
+
+def test_html_source_newlines_normalised_to_spaces() -> None:
+    """Newlines that appear in the HTML source (formatting only) should become
+    spaces in the output, not hard line-breaks."""
+    # Source newlines between text and inline elements are purely cosmetic in HTML.
+    html = '<p class="ltx_p">word one\nword two</p>'
+
+    result = convert_fragment_to_markdown(html)
+    # The newline must not create a hard break; words must be separated by a space.
+    assert "\n" not in result
+    assert "word one word two" in result
+
+
+def test_br_element_produces_markdown_hard_break() -> None:
+    """An explicit <br> element must survive as a markdown hard line-break (two
+    trailing spaces + newline) so that rendered output reflects the line break."""
+    html = '<p>Line one.<br/>Line two.</p>'
+
+    result = convert_fragment_to_markdown(html)
+    assert "Line one." in result
+    assert "Line two." in result
+    # The two lines must be separated by a hard-break, not just collapsed.
+    assert "  \n" in result
+

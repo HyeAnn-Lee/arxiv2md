@@ -130,9 +130,38 @@ def _serialize_children(container: Tag, *, remove_inline_citations: bool = False
     return blocks
 
 
+_BLOCK_ELEMENT_NAMES = frozenset(
+    {"p", "section", "div", "article", "figure", "table", "ul", "ol", "blockquote",
+     "h1", "h2", "h3", "h4", "h5", "h6", "dl", "dt", "dd", "pre"}
+)
+
+
+def _has_block_children(tag: Tag) -> bool:
+    """Return True if *tag* has at least one direct block-level child element."""
+    return any(
+        isinstance(child, Tag) and child.name in _BLOCK_ELEMENT_NAMES
+        for child in tag.children
+    )
+
+
 def _serialize_block(tag: Tag, *, remove_inline_citations: bool = False) -> list[str]:
-    if tag.name in {"section", "article", "div", "span"}:
+    if tag.name in {"section", "article"}:
         return _serialize_children(tag, remove_inline_citations=remove_inline_citations)
+
+    if tag.name == "div":
+        # If the div contains block-level elements, treat it as a block container.
+        # Otherwise treat the div as an inline/paragraph node so that bare text and
+        # <span> children are not silently dropped.
+        if _has_block_children(tag):
+            return _serialize_children(tag, remove_inline_citations=remove_inline_citations)
+        content = _serialize_paragraph(tag, remove_inline_citations=remove_inline_citations)
+        return [content] if content else []
+
+    if tag.name == "span":
+        # <span> is always an inline element; serialise it as paragraph text so that
+        # its NavigableString children are not discarded.
+        content = _serialize_paragraph(tag, remove_inline_citations=remove_inline_citations)
+        return [content] if content else []
 
     if tag.name in {"h1", "h2", "h3", "h4", "h5", "h6"}:
         level = int(tag.name[1])
@@ -210,7 +239,10 @@ def _serialize_inline(node: Tag | NavigableString, *, remove_inline_citations: b
         return str(node)
 
     if node.name == "br":
-        return "\n"
+        # Use a markdown hard line-break (two trailing spaces + newline).
+        # This sentinel value survives _cleanup_inline_text's whitespace collapse
+        # because the surrounding spaces are non-\n whitespace.
+        return "  \n"
 
     if node.name in {"em", "i"}:
         return f"*{_serialize_children_inline(node, remove_inline_citations=remove_inline_citations)}*"
@@ -259,9 +291,14 @@ def _serialize_children_inline(tag: Tag, *, remove_inline_citations: bool = Fals
 
 
 def _cleanup_inline_text(text: str) -> str:
-    text = re.sub(r"[ \t]+", " ", text)
-    text = re.sub(r"\s*\n\s*", "\n", text)
-    return text.strip()
+    # Hard line-breaks from <br> elements are represented as "  \n" (the markdown
+    # hard-break sequence).  Split on that sentinel, normalise each segment's
+    # whitespace independently (this also collapses HTML source-formatting newlines
+    # into a single space), then reassemble.  Discard any empty leading/trailing
+    # segments that result from a hard-break at the very start or end of the text.
+    segments = text.split("  \n")
+    segments = [re.sub(r"\s+", " ", seg).strip() for seg in segments]
+    return "  \n".join(seg for seg in segments if seg)
 
 
 def _serialize_list(list_tag: Tag, indent: int = 0, *, remove_inline_citations: bool = False) -> list[str]:
@@ -312,7 +349,8 @@ def _serialize_table(table: Tag, *, remove_inline_citations: bool = False) -> st
                     continue
                 values = []
                 for cell in cells:
-                    cell_text = _cleanup_inline_text(_serialize_inline(cell, remove_inline_citations=remove_inline_citations)).replace("\n", "<br>")
+                    cell_text = _cleanup_inline_text(_serialize_inline(cell, remove_inline_citations=remove_inline_citations))
+                    cell_text = cell_text.replace("  \n", "<br>").replace("\n", "<br>")
                     values.append(cell_text)
                 rows.append(values)
     else:
@@ -323,7 +361,8 @@ def _serialize_table(table: Tag, *, remove_inline_citations: bool = False) -> st
                 continue
             values = []
             for cell in cells:
-                cell_text = _cleanup_inline_text(_serialize_inline(cell, remove_inline_citations=remove_inline_citations)).replace("\n", "<br>")
+                cell_text = _cleanup_inline_text(_serialize_inline(cell, remove_inline_citations=remove_inline_citations))
+                cell_text = cell_text.replace("  \n", "<br>").replace("\n", "<br>")
                 values.append(cell_text)
             rows.append(values)
 
