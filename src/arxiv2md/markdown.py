@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import re
-from typing import Iterable
+from urllib.parse import urljoin
 
 try:
     from bs4 import BeautifulSoup
@@ -57,7 +57,7 @@ def convert_html_to_markdown(html: str, *, remove_refs: bool = False, remove_toc
     return "\n\n".join(block for block in blocks if block).strip()
 
 
-def convert_fragment_to_markdown(html: str, *, remove_inline_citations: bool = False) -> str:
+def convert_fragment_to_markdown(html: str, *, remove_inline_citations: bool = False, base_url: str | None = None) -> str:
     """Convert an HTML fragment into Markdown without title/author/abstract handling.
 
     Parameters
@@ -67,11 +67,16 @@ def convert_fragment_to_markdown(html: str, *, remove_inline_citations: bool = F
     remove_inline_citations : bool
         If True, completely remove inline citation links. If False (default),
         citation links are converted to plain text (URL stripped).
+    base_url : str | None
+        Base URL to resolve relative image paths against. When provided,
+        relative ``<img src>`` attributes are converted to absolute URLs.
     """
     soup = BeautifulSoup(html, "html.parser")
     _strip_unwanted_elements(soup)
     convert_all_mathml_to_latex(soup)
     fix_tabular_tables(soup)
+    if base_url:
+        _resolve_image_urls(soup, base_url)
     blocks = _serialize_children(soup, remove_inline_citations=remove_inline_citations)
     return "\n\n".join(block for block in blocks if block).strip()
 
@@ -113,6 +118,17 @@ def fix_tabular_tables(root: BeautifulSoup) -> None:
         _remove_all_attributes(table)
         for child in table.find_all(["tbody", "thead", "tfoot", "tr", "td", "th"]):
             _remove_all_attributes(child)
+
+
+def _resolve_image_urls(root: BeautifulSoup, base_url: str) -> None:
+    """Resolve relative ``<img src>`` attributes to absolute URLs."""
+    # Ensure base_url ends with '/' so urljoin resolves relative paths correctly
+    if not base_url.endswith("/"):
+        base_url += "/"
+    for img in root.find_all("img"):
+        src = img.get("src")
+        if src and not src.startswith(("http://", "https://", "data:")):
+            img["src"] = urljoin(base_url, src)
 
 
 def _remove_all_attributes(tag: Tag) -> None:

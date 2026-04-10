@@ -167,3 +167,42 @@ def test_remove_inline_citations_ignores_non_ltx_cite() -> None:
 
     result = convert_fragment_to_markdown(html, remove_inline_citations=True)
     assert "A Book Title" in result
+
+
+def test_resolve_relative_image_urls() -> None:
+    """Test that relative image paths are resolved to absolute URLs."""
+    html = """
+    <figure>
+        <img src="extracted/figures/fig1.png" alt="Architecture diagram"/>
+        <figcaption>Figure 1: System overview</figcaption>
+    </figure>
+    """
+
+    result = convert_fragment_to_markdown(html, base_url="https://arxiv.org/html/2501.11120v1")
+    assert "https://arxiv.org/html/2501.11120v1/extracted/figures/fig1.png" in result
+    assert "Figure 1: System overview" in result
+
+
+def test_absolute_image_urls_unchanged() -> None:
+    """Test that absolute image URLs are not modified."""
+    html = """
+    <figure>
+        <img src="https://arxiv.org/html/2501.11120v1/assets/img.png" alt="Diagram"/>
+        <figcaption>Figure 2: Results</figcaption>
+    </figure>
+    """
+
+    result = convert_fragment_to_markdown(html, base_url="https://ar5iv.labs.arxiv.org/html/2501.11120v1")
+    assert "https://arxiv.org/html/2501.11120v1/assets/img.png" in result
+
+
+def test_no_base_url_preserves_relative_paths() -> None:
+    """Test that without base_url, relative paths are preserved as-is."""
+    html = """
+    <figure>
+        <img src="extracted/fig1.png" alt="Diagram"/>
+    </figure>
+    """
+
+    result = convert_fragment_to_markdown(html)
+    assert "extracted/fig1.png" in result

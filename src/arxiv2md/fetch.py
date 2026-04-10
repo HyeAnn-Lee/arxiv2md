@@ -28,16 +28,22 @@ async def fetch_arxiv_html(
     version: str | None,
     use_cache: bool = True,
     ar5iv_url: str | None = None,
-) -> str:
+) -> tuple[str, str]:
     """Fetch arXiv HTML and cache it locally.
 
     Tries html_url first (arxiv.org), then falls back to ar5iv_url if 404.
+
+    Returns:
+        A tuple of (html_text, source_url) where source_url is the URL that
+        was actually used to fetch the HTML.
     """
     cache_dir = _cache_dir_for(arxiv_id, version)
     html_path = cache_dir / "source.html"
+    source_url_path = cache_dir / "source_url.txt"
 
     if use_cache and _is_cache_fresh(html_path):
-        return html_path.read_text(encoding="utf-8")
+        cached_source_url = source_url_path.read_text(encoding="utf-8").strip() if source_url_path.exists() else html_url
+        return html_path.read_text(encoding="utf-8"), cached_source_url
 
     # Try primary URL (arxiv.org) first
     try:
@@ -45,7 +51,8 @@ async def fetch_arxiv_html(
         evict_if_needed()
         cache_dir.mkdir(parents=True, exist_ok=True)
         html_path.write_text(html_text, encoding="utf-8")
-        return html_text
+        source_url_path.write_text(html_url, encoding="utf-8")
+        return html_text, html_url
     except RuntimeError as primary_error:
         # If we got 404 and have ar5iv fallback, try it
         if ar5iv_url and "does not have an HTML version" in str(primary_error):
@@ -54,7 +61,8 @@ async def fetch_arxiv_html(
                 evict_if_needed()
                 cache_dir.mkdir(parents=True, exist_ok=True)
                 html_path.write_text(html_text, encoding="utf-8")
-                return html_text
+                source_url_path.write_text(ar5iv_url, encoding="utf-8")
+                return html_text, ar5iv_url
             except Exception:
                 # If ar5iv also fails, raise the original error
                 pass
