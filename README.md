@@ -77,11 +77,8 @@ from arxiv2md import ingest_paper_sync
 
 result = ingest_paper_sync("2501.11120v1")
 print(result.content)
-```
 
-An async version is also available for use inside async contexts (e.g. Jupyter notebooks, async frameworks):
-
-```python
+# or use the async version
 from arxiv2md import ingest_paper
 
 result = await ingest_paper("2501.11120v1")
