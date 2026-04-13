@@ -29,6 +29,10 @@ _AR5IV_FATAL_MARKERS = (
 )
 
 
+class NoHtmlAvailableError(RuntimeError):
+    """Raised when arXiv does not provide an HTML version for a paper."""
+
+
 async def fetch_arxiv_html(
     html_url: str,
     *,
@@ -57,7 +61,7 @@ async def fetch_arxiv_html(
     try:
         html_text = await _fetch_with_retries(html_url)
         if _is_arxiv_no_html_page(html_text):
-            raise RuntimeError(
+            raise NoHtmlAvailableError(
                 "This paper does not have an HTML version available on arXiv. "
                 "arxiv2md requires papers to be available in HTML format. "
                 "Older papers may only be available as PDF."
@@ -67,9 +71,9 @@ async def fetch_arxiv_html(
         html_path.write_text(html_text, encoding="utf-8")
         source_url_path.write_text(html_url, encoding="utf-8")
         return html_text, html_url
-    except RuntimeError as primary_error:
-        # If we got 404 and have ar5iv fallback, try it
-        if ar5iv_url and "does not have an HTML version" in str(primary_error):
+    except NoHtmlAvailableError as primary_error:
+        # If the primary source has no HTML and we have ar5iv fallback, try it
+        if ar5iv_url:
             try:
                 html_text = await _fetch_with_retries(ar5iv_url)
                 if _is_ar5iv_fatal_page(html_text):
@@ -106,7 +110,7 @@ async def _fetch_with_retries(url: str) -> str:
 
             # Check for 404 specifically to provide a better error message
             if response.status_code == 404:
-                raise RuntimeError(
+                raise NoHtmlAvailableError(
                     "This paper does not have an HTML version available on arXiv. "
                     "arxiv2md requires papers to be available in HTML format. "
                     "Older papers may only be available as PDF."
@@ -118,6 +122,8 @@ async def _fetch_with_retries(url: str) -> str:
                 response.raise_for_status()
                 _ensure_html_response(response)
                 return response.text
+        except NoHtmlAvailableError:
+            raise
         except (httpx.RequestError, httpx.HTTPStatusError, RuntimeError) as exc:
             last_exc = exc
 
