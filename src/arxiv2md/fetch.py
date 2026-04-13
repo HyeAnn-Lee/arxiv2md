@@ -19,6 +19,14 @@ from arxiv2md.config import (
 )
 
 _RETRY_STATUS = {429, 500, 502, 503, 504}
+_ARXIV_NO_HTML_MARKERS = (
+    "no html for",
+    "html is not available for the source",
+)
+_AR5IV_FATAL_MARKERS = (
+    "no content available",
+    "conversion to html had a fatal error",
+)
 
 
 async def fetch_arxiv_html(
@@ -48,6 +56,12 @@ async def fetch_arxiv_html(
     # Try primary URL (arxiv.org) first
     try:
         html_text = await _fetch_with_retries(html_url)
+        if _is_arxiv_no_html_page(html_text):
+            raise RuntimeError(
+                "This paper does not have an HTML version available on arXiv. "
+                "arxiv2md requires papers to be available in HTML format. "
+                "Older papers may only be available as PDF."
+            )
         evict_if_needed()
         cache_dir.mkdir(parents=True, exist_ok=True)
         html_path.write_text(html_text, encoding="utf-8")
@@ -58,6 +72,11 @@ async def fetch_arxiv_html(
         if ar5iv_url and "does not have an HTML version" in str(primary_error):
             try:
                 html_text = await _fetch_with_retries(ar5iv_url)
+                if _is_ar5iv_fatal_page(html_text):
+                    raise RuntimeError(
+                        "ar5iv could not convert this paper to usable HTML. "
+                        "Please try another version or use the PDF directly."
+                    )
                 evict_if_needed()
                 cache_dir.mkdir(parents=True, exist_ok=True)
                 html_path.write_text(html_text, encoding="utf-8")
@@ -108,6 +127,16 @@ def _ensure_html_response(response: httpx.Response) -> None:
     content_type = response.headers.get("content-type", "")
     if "text/html" not in content_type:
         raise ValueError(f"Unexpected content-type: {content_type}")
+
+
+def _is_arxiv_no_html_page(html_text: str) -> bool:
+    lowered = html_text.lower()
+    return all(marker in lowered for marker in _ARXIV_NO_HTML_MARKERS)
+
+
+def _is_ar5iv_fatal_page(html_text: str) -> bool:
+    lowered = html_text.lower()
+    return all(marker in lowered for marker in _AR5IV_FATAL_MARKERS)
 
 
 def _is_cache_fresh(html_path: Path) -> bool:
