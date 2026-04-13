@@ -82,8 +82,13 @@ async def fetch_arxiv_html(
                 html_path.write_text(html_text, encoding="utf-8")
                 source_url_path.write_text(ar5iv_url, encoding="utf-8")
                 return html_text, ar5iv_url
-            except Exception:
-                # If ar5iv also fails, raise the original error
+            except RuntimeError as fallback_error:
+                if str(fallback_error) == (
+                    "ar5iv could not convert this paper to usable HTML. "
+                    "Please try another version or use the PDF directly."
+                ):
+                    raise
+                # If ar5iv fetch/retry logic also fails, raise the original error
                 pass
         # Re-raise the original error
         raise primary_error
