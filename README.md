@@ -41,8 +41,8 @@ arxiv2md 2501.11120v1 -o paper.md
 # Only extract specific sections
 arxiv2md 2501.11120v1 --section-filter-mode include --sections "Abstract,Introduction" -o -
 
-# Strip references, TOC, and inline citations
-arxiv2md 2501.11120v1 --remove-refs --remove-toc --remove-inline-citations -o -
+# Strip references and TOC
+arxiv2md 2501.11120v1 --remove-refs --remove-toc -o -
 
 # Include YAML frontmatter with paper metadata
 arxiv2md 2501.11120v1 --frontmatter -o paper.md
@@ -108,11 +108,11 @@ Feed the output directly into your agent's context. Section filtering lets you k
 ## Development
 
 ```bash
-# Install all dependencies (server + dev/test)
-pip install -e .[server,dev]
+pip install -e .[server]
 uvicorn server.main:app --reload --app-dir src
 
 # Run tests
+pip install -e .[dev]
 pytest tests
 ```
 
