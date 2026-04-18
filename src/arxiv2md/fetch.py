@@ -63,10 +63,13 @@ async def fetch_arxiv_html(
                 html_path.write_text(html_text, encoding="utf-8")
                 source_url_path.write_text(ar5iv_url, encoding="utf-8")
                 return html_text, ar5iv_url
+            except asyncio.CancelledError:
+                raise
             except Exception as ar5iv_error:
                 raise RuntimeError(
-                    f"{primary_error} Fallback to ar5iv also failed: {ar5iv_error}"
-                ) from ar5iv_error
+                    f"Primary fetch failed: {primary_error} "
+                    f"Fallback to ar5iv also failed: {ar5iv_error}"
+                ) from primary_error
         # Re-raise the original error
         raise primary_error
 
