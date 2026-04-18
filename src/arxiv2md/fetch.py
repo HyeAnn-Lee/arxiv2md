@@ -63,9 +63,10 @@ async def fetch_arxiv_html(
                 html_path.write_text(html_text, encoding="utf-8")
                 source_url_path.write_text(ar5iv_url, encoding="utf-8")
                 return html_text, ar5iv_url
-            except Exception:
-                # If ar5iv also fails, raise the original error
-                pass
+            except Exception as ar5iv_error:
+                raise RuntimeError(
+                    f"{primary_error} Fallback to ar5iv also failed: {ar5iv_error}"
+                ) from ar5iv_error
         # Re-raise the original error
         raise primary_error
 
@@ -93,7 +94,9 @@ async def _fetch_with_retries(url: str) -> str:
             else:
                 response.raise_for_status()
                 _ensure_html_response(response)
-                return response.text
+                html_text = response.text
+                _ensure_valid_html_payload(url, html_text)
+                return html_text
         except (httpx.RequestError, httpx.HTTPStatusError, RuntimeError) as exc:
             last_exc = exc
 
@@ -108,6 +111,31 @@ def _ensure_html_response(response: httpx.Response) -> None:
     content_type = response.headers.get("content-type", "")
     if "text/html" not in content_type:
         raise ValueError(f"Unexpected content-type: {content_type}")
+
+
+def _ensure_valid_html_payload(url: str, html_text: str) -> None:
+    """Validate provider-specific HTML payloads.
+
+    ar5iv may return an HTTP 200 page that only contains a conversion failure
+    notice (no paper content). Treat those as fetch failures so ingestion can
+    surface a meaningful error instead of parsing empty content.
+    """
+    if "ar5iv.labs.arxiv.org" in url and _looks_like_failed_ar5iv_conversion(html_text):
+        raise RuntimeError(
+            "ar5iv conversion failed for this paper. arxiv2md cannot extract content "
+            "from an ar5iv error page."
+        )
+
+
+def _looks_like_failed_ar5iv_conversion(html_text: str) -> bool:
+    """Return True if ar5iv HTML appears to be a conversion error page."""
+    lowered = html_text.lower()
+    failure_markers = (
+        "no content available",
+        "conversion to html had a fatal error",
+        "ar5iv-severity-fatal",
+    )
+    return any(marker in lowered for marker in failure_markers)
 
 
 def _is_cache_fresh(html_path: Path) -> bool:
