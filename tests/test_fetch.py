@@ -9,6 +9,30 @@ from arxiv2md import fetch as fetch_module
 from arxiv2md.fetch import _ensure_valid_html_payload, _fetch_with_retries, _looks_like_failed_ar5iv_conversion
 
 
+def _patch_fetch_client(monkeypatch: pytest.MonkeyPatch, html: str) -> None:
+    class FakeAsyncClient:
+        def __init__(self, **_: object) -> None:
+            pass
+
+        async def __aenter__(self) -> FakeAsyncClient:
+            return self
+
+        async def __aexit__(self, exc_type: object, exc: object, tb: object) -> bool:
+            return False
+
+        async def get(self, url: str) -> httpx.Response:
+            request = httpx.Request("GET", url)
+            return httpx.Response(
+                200,
+                headers={"content-type": "text/html; charset=utf-8"},
+                text=html,
+                request=request,
+            )
+
+    monkeypatch.setattr(fetch_module, "ARXIV2MD_FETCH_MAX_RETRIES", 0)
+    monkeypatch.setattr(fetch_module.httpx, "AsyncClient", FakeAsyncClient)
+
+
 def test_detects_ar5iv_fatal_conversion_page() -> None:
     html = """
     <html>
@@ -70,27 +94,7 @@ async def test_fetch_with_retries_rejects_failed_ar5iv_payload(monkeypatch: pyte
     </html>
     """
 
-    class FakeAsyncClient:
-        def __init__(self, **_: object) -> None:
-            pass
-
-        async def __aenter__(self) -> FakeAsyncClient:
-            return self
-
-        async def __aexit__(self, exc_type: object, exc: object, tb: object) -> bool:
-            return False
-
-        async def get(self, url: str) -> httpx.Response:
-            request = httpx.Request("GET", url)
-            return httpx.Response(
-                200,
-                headers={"content-type": "text/html; charset=utf-8"},
-                text=html,
-                request=request,
-            )
-
-    monkeypatch.setattr(fetch_module, "ARXIV2MD_FETCH_MAX_RETRIES", 0)
-    monkeypatch.setattr(fetch_module.httpx, "AsyncClient", FakeAsyncClient)
+    _patch_fetch_client(monkeypatch, html)
 
     with pytest.raises(RuntimeError, match="ar5iv conversion failed"):
         await _fetch_with_retries("https://ar5iv.labs.arxiv.org/html/2504.08066")
@@ -105,27 +109,7 @@ async def test_fetch_with_retries_returns_normal_ar5iv_payload(monkeypatch: pyte
     </html>
     """
 
-    class FakeAsyncClient:
-        def __init__(self, **_: object) -> None:
-            pass
-
-        async def __aenter__(self) -> FakeAsyncClient:
-            return self
-
-        async def __aexit__(self, exc_type: object, exc: object, tb: object) -> bool:
-            return False
-
-        async def get(self, url: str) -> httpx.Response:
-            request = httpx.Request("GET", url)
-            return httpx.Response(
-                200,
-                headers={"content-type": "text/html; charset=utf-8"},
-                text=html,
-                request=request,
-            )
-
-    monkeypatch.setattr(fetch_module, "ARXIV2MD_FETCH_MAX_RETRIES", 0)
-    monkeypatch.setattr(fetch_module.httpx, "AsyncClient", FakeAsyncClient)
+    _patch_fetch_client(monkeypatch, html)
 
     result = await _fetch_with_retries("https://ar5iv.labs.arxiv.org/html/2501.11120")
     assert result == html
